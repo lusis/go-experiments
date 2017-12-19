@@ -41,7 +41,7 @@ func foo(x string, opts ...Option) (bar, error)
 with invocations more sane like:
 
 ```go
-foo("bar", UggOpt("ugg"), IntOpt(10) // replaces foo("bar", "ugg", nil, 10)
+foo("bar", UggOpt("ugg"), IntOpt(10)) // replaces foo("bar", "ugg", nil, 10)
 foo("baz", QuxOpt("qux"), SnarfOpt(&snarf{})) // replaces foo("baz", "qux", &snarf{}, 0)
 foo("happy life") // replaces foo("fml", "", nil, 0)
 ```
