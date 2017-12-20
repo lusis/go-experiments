@@ -57,7 +57,19 @@ func TestErrOpt(t *testing.T) {
 	assert.Nil(t, r)
 	assert.Error(t, err)
 }
-
+func TestAddHeaders(t *testing.T) {
+	headers := map[string]string{
+		"fooheader": "foovalue",
+		"barheader": "barvalue",
+	}
+	response, err := Get("https://httpbin.org/anything", AddHeaders(headers))
+	assert.NoError(t, err)
+	res := &testHTPPBinResponse{}
+	jErr := json.Unmarshal(response.Body, &res)
+	assert.NoError(t, jErr)
+	assert.Equal(t, "foovalue", res.Headers["Fooheader"])
+	assert.Equal(t, "barvalue", res.Headers["Barheader"])
+}
 func TestAccept(t *testing.T) {
 	response, err := Get("https://httpbin.org/anything", Accept("application/octet"))
 	assert.NoError(t, err)

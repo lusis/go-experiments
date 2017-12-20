@@ -24,9 +24,13 @@ type Request struct {
 	accept             string
 	queryParams        map[string]string
 	body               io.Reader
+	headers            map[string]string
 	allowedStatusCodes []int
 	sync.RWMutex
 }
+
+// RequestOption is a type for functional options
+type RequestOption func(*Request) error
 
 func (cr *Request) setAllowedStatusCode(i int) {
 	cr.allowedStatusCodes = append(cr.allowedStatusCodes, i)
@@ -40,6 +44,18 @@ func (cr *Request) setHTTPClient(c *http.Client) {
 	cr.httpClient = c
 }
 
+// AddHeaders adds custom headers to the request
+func AddHeaders(h ...map[string]string) RequestOption {
+	return func(r *Request) error {
+		for _, pair := range h {
+			for k, v := range pair {
+				r.headers[k] = v
+			}
+		}
+		return nil
+	}
+}
+
 // SetClient sets a custom http.Client to use for the request
 func SetClient(client *http.Client) RequestOption {
 	return func(r *Request) error {
@@ -47,9 +63,6 @@ func SetClient(client *http.Client) RequestOption {
 		return nil
 	}
 }
-
-// RequestOption is a type for functional options
-type RequestOption func(*Request) error
 
 // QueryParams sets the query params for a request
 func QueryParams(m map[string]string) RequestOption {
@@ -164,7 +177,9 @@ func newHTTPRequest(opts ...RequestOption) (*Request, *http.Request, error) {
 		r.setHTTPClient(&http.Client{})
 	}
 	codes := make([]int, 0)
+	headers := make(map[string]string)
 	r.allowedStatusCodes = codes
+	r.headers = headers
 
 	for _, opt := range opts {
 		r.Lock()
@@ -193,6 +208,10 @@ func (cr *Request) httpRequest() (*http.Request, error) {
 
 	if reqErr != nil {
 		return nil, reqErr
+	}
+
+	for k, v := range cr.headers {
+		req.Header.Add(k, v)
 	}
 	qs := url.Values{}
 	for q, p := range cr.queryParams {
