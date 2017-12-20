@@ -4,20 +4,25 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"sync"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Response represents an http response
 type Response struct {
 	Body    []byte
 	Headers http.Header
+	Cookies []*http.Cookie
 	Status  int
 }
 
 // Request represents an http request
 type Request struct {
 	httpClient         *http.Client
+	cookieJar          *cookiejar.Jar
 	url                string
 	method             string
 	contentType        string
@@ -68,6 +73,14 @@ func SetClient(client *http.Client) RequestOption {
 func QueryParams(m map[string]string) RequestOption {
 	return func(r *Request) error {
 		r.queryParams = m
+		return nil
+	}
+}
+
+// SetCookieJar sets the cookie jar to be used with requests
+func SetCookieJar(jar *cookiejar.Jar) RequestOption {
+	return func(r *Request) error {
+		r.cookieJar = jar
 		return nil
 	}
 }
@@ -180,7 +193,13 @@ func newHTTPRequest(opts ...RequestOption) (*Request, *http.Request, error) {
 	headers := make(map[string]string)
 	r.allowedStatusCodes = codes
 	r.headers = headers
-
+	jar, jarErr := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+	if jarErr != nil {
+		return nil, nil, jarErr
+	}
+	r.cookieJar = jar
 	for _, opt := range opts {
 		r.Lock()
 		if err := opt(r); err != nil {
@@ -189,6 +208,7 @@ func newHTTPRequest(opts ...RequestOption) (*Request, *http.Request, error) {
 		}
 		r.Unlock()
 	}
+
 	req, err := r.httpRequest()
 	return r, req, err
 }
@@ -267,6 +287,7 @@ func doRequest(opts ...RequestOption) (*Response, error) {
 	if reqErr != nil {
 		return nil, reqErr
 	}
+	cr.httpClient.Jar = cr.cookieJar
 	resp, respErr := cr.httpClient.Do(req)
 	if respErr != nil {
 		return nil, respErr
@@ -278,6 +299,7 @@ func doRequest(opts ...RequestOption) (*Response, error) {
 	response.Body = readBody
 	response.Headers = resp.Header
 	response.Status = resp.StatusCode
+	response.Cookies = append(response.Cookies, resp.Cookies()...)
 	if len(cr.getAllowedStatusCodes()) != 0 {
 		passed := false
 		for _, code := range cr.getAllowedStatusCodes() {

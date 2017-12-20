@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/net/publicsuffix"
 )
 
 func testCustomOption() RequestOption {
@@ -23,6 +27,10 @@ type testHTPPBinResponse struct {
 	Form    map[string]string `json:"form"`
 	URL     string            `json:"url"`
 	Data    string            `json:"data,omitempty"`
+}
+
+type testHTTPBinCookieResponse struct {
+	Cookies map[string]string `json:"cookies"`
 }
 
 func TestNew(t *testing.T) {
@@ -49,6 +57,36 @@ func TestCustomHTTPClient(t *testing.T) {
 	assert.NoError(t, err)
 	assert.IsType(t, &http.Request{}, r)
 	assert.Equal(t, 15*time.Second, c.httpClient.Timeout)
+}
+
+func TestCookieJarDefault(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "foocookiekey", Value: "foocookievalue"})
+	}))
+	defer ts.Close()
+	url, _ := url.Parse(ts.URL)
+	jar, _ := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+	resp, err := Get(ts.URL)
+	assert.NoError(t, err)
+	assert.Equal(t, "foocookievalue", resp.Cookies[0].Value)
+	assert.Len(t, jar.Cookies(url), 0)
+}
+
+func TestCookieJarCustom(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "foocookiekey", Value: "foocookievalue"})
+	}))
+	defer ts.Close()
+	url, _ := url.Parse(ts.URL)
+	jar, _ := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+	resp, err := Get(ts.URL, SetCookieJar(jar))
+	assert.NoError(t, err)
+	assert.Equal(t, "foocookievalue", resp.Cookies[0].Value)
+	assert.Len(t, jar.Cookies(url), 1)
 }
 
 func TestErrOpt(t *testing.T) {
@@ -99,6 +137,7 @@ func TestGetAllowedStatusCodesValid(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 200, response.Status)
 }
+
 func TestGet(t *testing.T) {
 	qp := make(map[string]string)
 	qp["foo"] = "bar"
